@@ -10,12 +10,14 @@ public:
 
     // Method to start the siren with a specified number of repeats
     void startSiren(int repeats);
-    void bip(int repeat);
+    void bip(int repeat, int freq=1450);
     void startSound(int freq);
     void stopSound();
 
 private:
     int buzzerPin; // Pin connected to the buzzer
+    int currentBuzzerFreq;
+    bool isToneOn = false;
 };
 
 #endif

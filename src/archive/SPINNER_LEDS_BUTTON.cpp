@@ -1,46 +1,51 @@
 #include <Arduino.h>
-#include "SR04.h"
 #include "Siren.h"
-#include "pitches.h"
+#include "Tilt.h"
+#include <Servo.h>
+#include "Enums.h"
 
 // put function declarations here:
-void setRGBColors(int r, int g, int b, bool sonarScan = true);
+int myFunction(int, int);
+void setRGBColors(int, int, int);
 bool handleButtonPush();
 void testLEDs();
-void sonarTest();
-double calcBrightnessDivision();
+void buzz(int);
+void handleTiltButton();
+void spinFan(SpinDirection direction);
+
 // www.elegoo.com
 // 2016.12.8
 
 // Define Pins
 #define RED 11
+#define SERVO 3
+#define BUZZER_ACT 2
 #define GREEN 10
 #define BLUE 9
 #define BUTTON 13
-#define delayTime 0 // fading time between colors
-#define SONAR_TRIGGER 7
-#define SONAR_ECHO 6
-#define BUZZER 3
+#define BUZZER_PASS 4
+#define TILE_INPUT 7
+#define BUTTON_TILT 8
+#define delayTime 10 // fading time between colors
 
-#define BUZZER_FREQ_START NOTE_C4
-#define BUZZER_FREQ_END NOTE_B5
-
-SR04 mySonar(SONAR_ECHO, SONAR_TRIGGER);
-Siren mySiren(BUZZER);
+Servo myServo;
 
 void setup()
 {
     pinMode(RED, OUTPUT);
     pinMode(GREEN, OUTPUT);
     pinMode(BLUE, OUTPUT);
+    digitalWrite(RED, LOW);
+    digitalWrite(GREEN, LOW);
+    digitalWrite(BLUE, LOW);
     pinMode(BUTTON, INPUT_PULLUP);
-    pinMode(BUZZER, OUTPUT);
-
+    pinMode(BUTTON_TILT, INPUT_PULLUP);
     Serial.begin(9600); // Initialize serial communication at 9600 baud
     Serial.println("Setup complete");
-    // testLEDs();
-    // sonarTest();
-    mySiren.bip(1);
+    testLEDs();
+    myServo.attach(SERVO);
+    spinFan(SpinDirection::RIGHT);
+    spinFan(SpinDirection::LEFT);
 }
 
 // define variables
@@ -50,6 +55,7 @@ int blueValue;
 bool isOn = true;
 unsigned long debounceDelay = 100;  // Debounce time (50 ms is usually sufficient)
 unsigned long lastDebounceTime = 0; // Variable to store the last debounce time
+Tilt tiltInput(TILE_INPUT);
 
 // main loop
 void loop()
@@ -125,19 +131,8 @@ void loop()
     }
 }
 
-void setRGBColors(int r, int g, int b, bool sonarScan)
+void setRGBColors(int r, int g, int b)
 {
-    if (sonarScan)
-    {
-        double brightFactor = calcBrightnessDivision();
-        r = r * brightFactor;
-        g = g * brightFactor;
-        b = b * brightFactor;
-        int freqRadius = BUZZER_FREQ_END - BUZZER_FREQ_START;
-        Serial.println("Brightness factor: " + String(brightFactor) + ", Freq: " + String(freqRadius * brightFactor));
-        mySiren.startSound((freqRadius * brightFactor) + BUZZER_FREQ_START);
-    }
-
     String log = "Red: " + String(r) + " Green: " + String(g) + " blue: " + String(b);
     analogWrite(RED, r);
     analogWrite(GREEN, g);
@@ -146,6 +141,7 @@ void setRGBColors(int r, int g, int b, bool sonarScan)
 
 bool handleButtonPush()
 {
+    handleTiltButton();
     // Read the current state of the button
     int reading = digitalRead(BUTTON);
     if (reading == HIGH)
@@ -164,7 +160,9 @@ bool handleButtonPush()
         if (!isOn)
         {
             setRGBColors(0, 0, 0);
-            mySiren.stopSound();
+            buzz(50);
+            delay(100);
+            buzz(50);
         }
     }
 
@@ -173,32 +171,62 @@ bool handleButtonPush()
 
 void testLEDs()
 {
-    setRGBColors(255, 0, 0, false);
+    setRGBColors(255, 0, 0);
     delay(500);
-    setRGBColors(0, 255, 0, false);
+    setRGBColors(0, 255, 0);
     delay(500);
-    setRGBColors(0, 0, 255, false);
+    setRGBColors(0, 0, 255);
     delay(500);
 }
 
-void sonarTest()
+void buzz(int miliseconds)
 {
-    Serial.println("Activating sonar test");
-    long distanceCM = mySonar.DistanceAvg();
-    Serial.println("Detected object " + String(distanceCM) + "cm away");
+    digitalWrite(BUZZER_ACT, HIGH);
+    delay(miliseconds);
+    digitalWrite(BUZZER_ACT, LOW);
 }
 
-double calcBrightnessDivision()
+void handleTiltButton()
 {
-    long distance = mySonar.DistanceAvg();
-    Serial.println("Distance: " + String(distance) + "cm");
-    int maxDistance = 20;
-    if (distance > maxDistance)
+    int buttonState = digitalRead(BUTTON_TILT);
+    if (buttonState == LOW)
     {
-        return 0;
+        tiltInput.turnOn();
+        bool isSameResult = tiltInput.isLastTilted() == tiltInput.updateTilted();
+
+        if(isSameResult) {
+            return;
+        }
+        Serial.println(isSameResult);
+
+        if (tiltInput.isLastTilted())
+        {
+            Serial.println("UPP");
+        }
+        else
+        {
+            Serial.println("DOWN");
+        }
     }
     else
     {
-        return 1 - (float)distance / maxDistance;
+        tiltInput.turnOff();
     }
+}
+
+void spinFan(SpinDirection direction) {
+    Serial.println("Starting fan rotation to side: " + String(direction));
+        if (direction == RIGHT) {
+        for (int pos = 0; pos <= 180; pos++) {
+            myServo.write(pos);
+            delay(15); // Adjust delay for smooth movement
+        }
+    } else if (direction == LEFT) {
+        for (int pos = 180; pos >= 0; pos--) {
+            myServo.write(pos);
+            delay(15); // Adjust delay for smooth movement
+        }
+    }
+
+  Serial.println("Finishing fan rotation");
 }
